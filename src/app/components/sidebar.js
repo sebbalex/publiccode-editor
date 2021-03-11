@@ -3,7 +3,7 @@ import { connect } from "react-redux";
 import copy from "copy-to-clipboard";
 import validator from "validator";
 import { notify } from "../store/notifications";
-import { APP_FORM } from "../contents/constants";
+import { APP_FORM, sampleUrl } from "../contents/constants";
 import img_x from "../../asset/img/x.svg";
 import img_copy from "../../asset/img/copy.svg";
 import img_upload from "../../asset/img/load.svg";
@@ -11,7 +11,7 @@ import img_download from "../../asset/img/download.svg";
 import img_dots from "../../asset/img/dots.svg";
 import img_xx from "../../asset/img/xx.svg";
 
-import { getRemoteYml } from "../utils/calls";
+import { passRemoteURLToValidator } from "../utils/calls";
 import { getLabel } from "../contents/data";
 
 function mapStateToProps(state) {
@@ -24,19 +24,35 @@ const mapDispatchToProps = dispatch => {
   };
 };
 
-const sampleUrl = `https://api.github.com/repos/italia/publiccode.yml/contents/version/0.1/example/publiccode.minimal.yml`;
 
 @connect(
   mapStateToProps,
   mapDispatchToProps
 )
-export default class sidebar extends Component {
+class sidebar extends Component {
   constructor(props) {
     super(props);
     this.state = {
       dialog: false,
       remoteYml: sampleUrl
     };
+  }
+
+  componentWillReceiveProps(prevProps) {
+    const { remoteYml } = prevProps;
+    const funFake = ({
+      preventDefault: () => { }
+    })
+
+    if (remoteYml !== this.props.remoteYml) {
+      console.log("remoteYml:", remoteYml);
+      this.setState({
+        dialog: true,
+        remoteYml: remoteYml
+      }, () => {
+        this.loadRemoteYaml(funFake);
+      });
+    }
   }
 
   showDialog(dialog) {
@@ -67,11 +83,22 @@ export default class sidebar extends Component {
 
     let yaml = null;
     try {
-      yaml = await getRemoteYml(remoteYml);
+      this.setState({ loading: true });
+      this.props.onLoadingRemote(true);
+
+      // piping url to validator which will returns a fresh
+      // and validated copy
+      yaml = await passRemoteURLToValidator(remoteYml);
+
       onLoad(yaml);
+
+      this.setState({ loading: false });
+      this.props.onLoadingRemote(false);
     } catch (error) {
-      console.error(error);
-      alert("error parsing remote yaml");
+
+      this.setState({ loading: false });
+      this.props.onLoadingRemote(false);
+      this.props.notify({ type: 1, msg: error.message, millis: 10000 });
     }
   }
 
@@ -82,7 +109,6 @@ export default class sidebar extends Component {
       this.props.notify({ type: 1, msg: "File not found" });
       return;
     }
-    // let ext = files[0].name.split(".")[1];
     let ext = files[0].name.split(/[. ]+/).pop();
     if (ext != "yml" && ext != "yaml") {
       this.props.notify({ type: 1, msg: "File type not supported" });
@@ -94,7 +120,7 @@ export default class sidebar extends Component {
 
     onReset();
 
-    reader.onload = function() {
+    reader.onload = function () {
       let yaml = reader.result;
       onLoad(yaml);
       document.getElementById("load_yaml").value = "";
@@ -105,6 +131,9 @@ export default class sidebar extends Component {
 
   download(data) {
     //has dom
+    if (!data || data.length == 0) {
+      return;
+    }
     const blob = new Blob([data], {
       type: "text/yaml;charset=utf-8;"
     });
@@ -116,7 +145,7 @@ export default class sidebar extends Component {
     tempLink.setAttribute("download", "publiccode.yml");
     document.body.appendChild(tempLink);
     tempLink.click();
-    setTimeout(function() {
+    setTimeout(function () {
       document.body.removeChild(tempLink);
       window.URL.revokeObjectURL(blobURL);
     }, 1000);
@@ -124,14 +153,15 @@ export default class sidebar extends Component {
 
   render() {
     let { dialog } = this.state;
-    let { yaml, loading, values, allFields, form } = this.props;
+    let { yaml, loading, allFields, form } = this.props;
     let errors = null;
     let fail = false;
 
     if (form && form[APP_FORM]) {
+      //was syncErrors
       errors =
-        form[APP_FORM] && form[APP_FORM].syncErrors
-          ? form[APP_FORM].syncErrors
+        form[APP_FORM] && form[APP_FORM].submitErrors
+          ? form[APP_FORM].submitErrors
           : null;
       fail = form[APP_FORM].submitFailed ? form[APP_FORM].submitFailed : false;
     }
@@ -208,10 +238,10 @@ export default class sidebar extends Component {
                       className="form-control"
                       type="url"
                       value={this.state.remoteYml}
-                      required="true"
+                      required={true}
                       onChange={e => this.handleChange(e)}
                     />
-                    <button type="submit" className="btn btn-primary">
+                    <button type="submit" className="btn btn-primary btn-block">
                       <img src={img_upload} alt="upload" />Load
                     </button>
                   </form>
@@ -249,9 +279,9 @@ export default class sidebar extends Component {
             </a>
           </div>
           <div className="sidebar__footer_item">
-            <a href="#">
+            <a href="#" className={!yaml ? 'disabled' : 'enabled'}>
               <img src={img_download} alt="dowload" />
-              <span className="action" onClick={() => this.download(yaml)}>
+              <span className="action" onClick={!yaml ? null : () => this.download(yaml)}>
                 Download
               </span>
             </a>
@@ -261,3 +291,5 @@ export default class sidebar extends Component {
     );
   }
 }
+
+export default sidebar;

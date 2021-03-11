@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import PropTypes from "prop-types";
 import classNames from "classnames";
-import { Field } from "redux-form";
+import { change } from "redux-form";
+import DebounceField from 'redux-form-debounce-field';
 import Info from "../../components/Info";
-import { useState } from 'react';
-
+import { useDispatch } from 'react-redux';
+import { APP_FORM } from "../../contents/constants";
 
 const renderInput = field => {
   const className = classNames([
@@ -13,8 +14,15 @@ const renderInput = field => {
   ]);
   let [count, setCount] = useState(0);
 
-
-    // let type = field.type;
+  const dispatch = useDispatch()
+  useDispatch(() => {
+    if (field.schema.value)
+      if (field.input)
+        if (!field.input.value)
+          dispatch(change(APP_FORM, field.input.name, field.schema.value));
+    // field.input.onChange(field.schema.value);
+  });
+  // let type = field.type;
   // if (field.schema.widget) {
   //   console.log("WIDGET", field.schema.widget);
   // }
@@ -34,7 +42,8 @@ const renderInput = field => {
         placeholder={field.placeholder}
         maxLength={field.maxLength}
         minLength={field.minLength}
-        onKeyUp={(val) => {setCount(count = val.target.value.length)}}
+        disabled={field.schema.disabled}
+        onKeyUp={(val) => { setCount(count = val.target.value.length) }}
       />
       {field.meta.touched &&
         field.meta.error && (
@@ -57,7 +66,7 @@ const renderInput = field => {
 
 const BaseInputWidget = props => {
   return (
-    <Field
+    <DebounceField
       component={renderInput}
       label={props.label}
       name={props.fieldName}

@@ -12,3 +12,8 @@ dist
 .env
 .serverless
 .eslintcache
+
+.idea
+TODO
+.vscode
+.history

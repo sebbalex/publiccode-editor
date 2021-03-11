@@ -1,21 +1,28 @@
-import React from "react";
+import React, {useState, useEffect} from "react";
 import classNames from "classnames";
-import { Field } from "redux-form";
+import {Field} from "redux-form";
 import Info from "../../components/Info";
 
 const zipObject = (props, values) =>
   props.reduce(
-    (prev, prop, i) => Object.assign(prev, { [prop]: values[i] }),
+    (prev, prop, i) => Object.assign(prev, {[prop]: values[i]}),
     {}
   );
 
 const renderChoice = field => {
   const className = classNames([
     "form-group",
-    { "has-error": field.meta.touched && field.meta.error }
+    {"has-error": field.meta.touched && field.meta.error}
   ]);
   const options = field.schema.enum;
   const optionNames = field.schema.enum_titles || options;
+
+  useEffect(() => {
+    if (field.schema.value)
+      if (field.input)
+        if (!field.input.value)
+          field.input.onChange(field.schema.value);
+  });
 
   const selectOptions = zipObject(options, optionNames);
   return (
@@ -26,21 +33,28 @@ const renderChoice = field => {
       {Object.entries(selectOptions).map(([value, name]) => (
         <div className="form-check" key={value}>
           <input
+            id={`${field.input.name}-${value}`}
             className="form-check-input"
             type="radio"
             name={field.input.name}
             value={value}
             checked={field.input.value === value}
+            disabled={field.schema.disabled}
             onChange={e => field.input.onChange(value)}
           />
-          <label className="form-check-label">{name}</label>
+          <label
+            className="form-check-label"
+            htmlFor={`${field.input.name}-${value}`}
+          >
+            {name}
+          </label>
         </div>
       ))}
 
       {field.meta.touched &&
-        field.meta.error && (
-          <span className="help-block">{field.meta.error}</span>
-        )}
+      field.meta.error && (
+        <span className="help-block">{field.meta.error}</span>
+      )}
 
       {field.description && (
         <Info

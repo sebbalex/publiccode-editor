@@ -13,7 +13,7 @@ class MyEditor extends Component {
     //let value = this.props.value  ? RichTextEditor.createValueFromString(this.props.value, "html") : emptyVal;
     let text = emptyVal;
     if (this.props.value) {
-      text = RichTextEditor.createValueFromString(this.props.value, "html");
+      text = RichTextEditor.createValueFromString(this.props.value, "markdown");
     }
     this.state = {
       text,
@@ -34,9 +34,9 @@ class MyEditor extends Component {
     console.log("onChange");
     if (this.props.onChange) {
       if (val == null) this.props.onChange("");
-      else this.props.onChange(val.toString("html"));
+      else this.props.onChange(val.toString("markdown"));
     }
-    this.setState({ text: val , count: this.strip(val.toString("html")).trim().length});
+    this.setState({ text: val , count: val.toString("markdown").trim().length});
   }
 
   componentWillReceiveProps(next) {
@@ -49,7 +49,7 @@ class MyEditor extends Component {
 
         let next_html = RichTextEditor.createValueFromString(
           next.initial,
-          "html"
+          "markdown"
         );
         this.setState({ text: next_html });
       }
@@ -74,7 +74,7 @@ class MyEditor extends Component {
 
 const renderInput = field => {
   const className = classNames([
-    "form-group editor__widget",
+    "form-group",
     { "has-error": field.meta.touched && field.meta.error }
   ]);
 
@@ -83,7 +83,7 @@ const renderInput = field => {
       <label className="control-label" htmlFor={"field-" + field.name}>
         {field.label} {field.required ? "*" : ""}
       </label>
-      <div className="form-control editor__wrapper">
+      <div className="editor__wrapper">
         <MyEditor
           pristine={field.meta.pristine}
           initial={field.meta.initial}

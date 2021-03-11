@@ -1,5 +1,4 @@
 import {
-  getData,
   SUMMARY,
   GROUPS,
   AVAILABLE_COUNTRIES
@@ -7,7 +6,6 @@ import {
 
 import _ from "lodash";
 import u from "updeep";
-import validator from "validator";
 import cleanDeep from "clean-deep";
 
 const extractGroup = (items, group) => {
@@ -44,8 +42,8 @@ export const flatGroup = (data, group) => {
 
 export const parseSummary = data => {
   if (!data[SUMMARY]) return null;
-  let languages = Object.keys(data[SUMMARY]);
-  let currentLanguage = languages[0];
+  // let languages = Object.keys(data[SUMMARY]);
+  // let currentLanguage = languages[0];
 };
 
 export const getSummary = values => {
@@ -77,7 +75,7 @@ export const transformDepensOn = obj => {
 };
 
 const importDepensOn = obj => {
-  let map = [];
+  // let map = [];
   if (obj.dependsOn) {
     let types = Object.keys(obj.dependsOn);
     let map = types.reduce((a, type) => {
@@ -109,7 +107,7 @@ export const transformBack = obj => {
       country = cc;
     }
   });
-  //- for each group get keys and readd with prefix
+  //- for each group get keys and read with prefix
   groups.map(group => {
     if (obj[group]) {
       Object.keys(obj[group]).forEach(k => {
@@ -146,6 +144,7 @@ export const transformBack = obj => {
   return { languages, values, country };
 };
 
+// eslint-disable-next-line no-unused-vars
 const cleanupFields = (element, obj) => {
   let availableKeys = Object.keys(element);
   Object.keys(obj).forEach(k => {
@@ -159,11 +158,25 @@ const cleanupFields = (element, obj) => {
   return obj;
 };
 
-const transformBooleanValues = obj => {
+const getElement = (elements, k) => {
+  let e;
+  if (typeof elements === "object" && !Array.isArray(elements)) {
+    if (elements.title != 'dependsOn')
+      e = elements.properties[k];
+    else {
+      elements = transformDepensOn(elements);
+    }
+  }
+  else
+    e = elements.find(v => { return v.title == k });
+  return e;
+}
+
+const transformBooleanValues = (obj, elements) => {
   Object.keys(obj).forEach(k => {
-    console.log(k,obj[k])
     if (typeof obj[k] === "object" && !Array.isArray(obj[k])) {
-      obj[k] = transformBooleanValues(Object.assign({}, obj[k]));
+      const e = elements.find(v => { return v.title == k });
+      obj[k] = transformBooleanValues(Object.assign({}, obj[k]), e);
     } else if (
       !Array.isArray(obj[k]) &&
       (obj[k] == true ||
@@ -171,14 +184,16 @@ const transformBooleanValues = obj => {
         obj[k] == "true" ||
         obj[k] == "false")
     ) {
-      if (obj[k] == true || obj[k] == "true") obj[k] = true;
-      else delete obj[k];
+      if (getElement(elements, k).type == 'boolean') {
+        if (obj[k] == true || obj[k] == "true") obj[k] = true;
+        else obj[k] = false;
+      }
     }
   });
   return obj;
 };
 
-export const transform = (values, country) => {
+export const transform = (values, country, elements) => {
   let langs = Object.keys(values);
 
   //GET SUMMARY BEFORE MERGE
@@ -205,6 +220,9 @@ export const transform = (values, country) => {
   }
   delete groups[SUMMARY];
 
+  //TRANSFORM  TRUE IN YES
+  obj = transformBooleanValues(Object.assign({}, obj), elements);
+
   //REPLACE GROUPS
   groups.forEach(group => {
     let sub = extractGroup(obj, group);
@@ -216,9 +234,5 @@ export const transform = (values, country) => {
 
   //REPLACE SUMMARY
   obj[SUMMARY] = summary;
-
-  //TRANSFORM  TRUE IN YES
-  obj = transformBooleanValues(Object.assign({}, obj));
-
   return cleanDeep(obj);
 };

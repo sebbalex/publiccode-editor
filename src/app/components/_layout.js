@@ -9,7 +9,7 @@ import { connect } from "react-redux";
     notifications: state.notifications
   };
 })
-export default class Layout extends Component {
+class Layout extends Component {
   componentWillReceiveProps(nextProps) {
     if (
       nextProps.notifications &&
@@ -40,11 +40,16 @@ export default class Layout extends Component {
     }
   }
   render() {
+    const loadingRemote = this.props.loadingRemote;
+
+    const className = loadingRemote ? "wrapper loadingRemote" : "wrapper";
     return (
-      <div className="wrapper">
+      <div className={className}>
         <ReactNotify ref="notificator" />
         {this.props.children}
       </div>
     );
   }
 }
+
+export default Layout;

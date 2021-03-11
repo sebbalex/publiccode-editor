@@ -1,14 +1,22 @@
 import React from "react";
 import PropTypes from "prop-types";
 import classNames from "classnames";
-import { Field } from "redux-form";
+import { Field, change } from "redux-form";
 import Info from "../../components/Info";
+import { useDispatch } from 'react-redux';
+import { APP_FORM } from "../../contents/constants";
 
 const renderInput = field => {
   const className = classNames([
     "form-group",
     { "has-error": field.meta.touched && field.meta.error }
   ]);
+
+  const dispatch = useDispatch()
+  if (field.required && field.input.value != true) {
+    dispatch(change(APP_FORM, field.input.name, 'false'));
+  }
+
   return (
     <div className={className}>
       <div className="form-check">
@@ -18,9 +26,12 @@ const renderInput = field => {
           className="form-check-input"
           type="checkbox"
           required={field.required}
-          id={"field-" + field.name}
+          id={`field-${field.input.name}`}
         />
-        <label className="form-check-label">
+        <label
+          className="form-check-label"
+          htmlFor={`field-${field.input.name}`}
+        >
           {field.label} {field.required ? "*" : ""}
         </label>
       </div>

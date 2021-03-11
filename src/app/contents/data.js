@@ -1,3 +1,4 @@
+import _ from 'lodash';
 import data, { fieldsAsync } from "./fields";
 
 const { sections, groups, available_countries, countrySpec } = data;
@@ -21,11 +22,27 @@ export const getData = async (countryCode = null) => {
 };
 
 export const getFieldByTitle = (allFields, title) => {
-  return allFields.find(field => field.title === title);
+  // flatten one properties level, see #87
+  const out = allFields.reduce((acc, ele) => {
+    if (ele.properties) {
+      Object.values(ele.properties).forEach(value => {
+        acc.push({
+            ...ele,
+            title: `${ele.title}_${value.title}`,
+            label: `${ele.label} ${value.label}`
+        })
+      });
+    } else {
+      acc.push(ele)
+    }
+    return acc;
+  }, []);
+
+  return out.find(field => field.title === title);
 };
 
 export const getLabel = (allFields, title) => {
-  let field = allFields.find(field => field.title === title);
+  let field = getFieldByTitle(allFields, title);
   if (field) {
     return field.label ? field.label : field.title;
   }
@@ -35,6 +52,9 @@ export const getLabel = (allFields, title) => {
 const generateBlocks = allFields => {
   return sections.map((s, i) => {
     let fields = allFields.filter(obj => obj.section === i);
+
+    fields = _.partition(fields, obj => obj.prepend).flat();
+
     let items = fields.map(i => {
       let prefix = i.group ? `${i.group}_` : "";
       if (!i.title.includes(prefix)) i.title = `${prefix}${i.title}`;
@@ -49,7 +69,7 @@ const generateBlocks = allFields => {
 };
 
 export const removeAdditional = (allFields, obj) => {
-  validKeys = allFields.map(f => f.title);
+  let validKeys = allFields.map(f => f.title);
   Object.keys(obj).forEach(key => validKeys.includes(key) || delete obj[key]);
   return obj;
 };
@@ -72,8 +92,7 @@ const getAllFields = (generic, countryFields = null) => {
   return generic;
 };
 
-//
-
+// eslint-disable-next-line no-unused-vars
 const flatAll = allFields => {
   console.log("flatAll", allFields);
   return allFields.reduce((list, f) => {

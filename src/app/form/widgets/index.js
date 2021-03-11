@@ -23,10 +23,15 @@ import FileWidget from "./FileWidget";
 import OneOfChoiceWidget from "./oneOfChoiceWidget";
 import EditorWidget from "./EditorWidget";
 import TagWidget from "./TagWidget";
+import ComboBoxWidget from "./ComboBoxWidget";
+import DateTimeReactWidget from "./DateTimeReactWidget";
+import RemoteSearchWidget from "./RemoteSearchWidget";
+import PhoneWidget from "./PhoneWidgets";
 
 export default {
   editor: EditorWidget,
   tags: TagWidget,
+  combobox: ComboBoxWidget,
   object: ObjectWidget,
   string: StringWidget,
   textarea: TextareaWidget,
@@ -44,11 +49,13 @@ export default {
   choice: ChoiceWidget,
   "choice-expanded": ChoiceExpandedWidget,
   "choice-multiple-expanded": ChoiceMultipleExpandedWidget,
-  date: DateWidget,
+  date: DateTimeReactWidget,
   datetime: DateTimeWidget,
   time: TimeWidget,
+  phone: PhoneWidget,
   "compatible-date": CompatibleDateWidget,
   "compatible-datetime": CompatibleDateTimeWidget,
   file: FileWidget,
-  oneOf: OneOfChoiceWidget
+  oneOf: OneOfChoiceWidget,
+  rsearch: RemoteSearchWidget
 };

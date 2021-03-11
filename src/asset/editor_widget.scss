@@ -22,3 +22,14 @@
   min-height: 300px;
   border-size: 0;
 }
+
+//override bottom border to 0px for
+//react-widgets component
+input.rw-widget-input {
+  border: none !important;
+}
+
+//fixes #98 - Editor area grows when unbreaked words
+.editor__component .public-DraftEditor-content {
+  word-break: break-all;
+}

@@ -1,23 +1,17 @@
 import React, { Component, Fragment } from "react";
 import { connect } from "react-redux";
-import { reduxForm } from "redux-form";
-import { initialize, submit } from "redux-form";
-import { notify, clearNotifications } from "../store/notifications";
-import { saveYaml, setVersions } from "../store/cache";
-import { APP_FORM, yamlData, versionsUrl } from "../contents/constants";
+import { initialize, submit, SubmissionError } from "redux-form";
+import { notify } from "../store/notifications";
+import { setVersions } from "../store/cache";
+import { APP_FORM } from "../contents/constants";
 import {
   getData,
-  SUMMARY,
-  GROUPS,
-  AVAILABLE_COUNTRIES
+  SUMMARY
 } from "../contents/data";
-import jsyaml from "../../../node_modules/js-yaml/dist/js-yaml.js";
+import jsyaml from "js-yaml";
 
 import _ from "lodash";
-import u from "updeep";
 import moment from "moment";
-
-import cleanDeep from "clean-deep";
 
 import Head from "./head";
 import Foot from "./foot";
@@ -30,11 +24,15 @@ import Sidebar from "./sidebar";
 import * as ft from "../utils/transform";
 import * as fv from "../utils/validate";
 
+import { staticFieldsJson, staticFieldsYaml } from "../contents/staticFields";
+import { postDataForValidation } from "../utils/calls";
+
 const mapStateToProps = state => {
   return {
     notifications: state.notifications,
     cache: state.cache,
-    form: state.form
+    form: state.form,
+    yamlLoaded: state.yamlLoaded
   };
 };
 
@@ -51,7 +49,7 @@ const mapDispatchToProps = dispatch => {
   mapStateToProps,
   mapDispatchToProps
 )
-export default class Index extends Component {
+class Index extends Component {
   constructor(props) {
     super(props);
     this.state = {
@@ -67,14 +65,17 @@ export default class Index extends Component {
       elements: null,
       activeSection: 0,
       allFields: null,
-      lastGen: null
+      lastGen: null,
+      yamlLoaded: false
     };
+    this.onLoadingRemote = this.props.onLoadingRemote.bind(this);
   }
 
   initBootstrap() {
     // $('[data-toggle="tooltip"]').tooltip();
     // $('[data-toggle="popover"]').popover();
     // $('[data-toggle="collapse"]').collapse();
+    // eslint-disable-next-line no-undef
     $('[data-toggle="dropdown"]').dropdown();
   }
 
@@ -82,6 +83,20 @@ export default class Index extends Component {
     await this.initData();
     this.switchLang("it");
     this.switchCountry("it");
+
+    // checks whether url query parameter
+    // is present in url, if so it will
+    // passed as prop to Sidebar component
+    // which will be rerendered validating
+    // its value.
+    const search = window.location.search;
+    const params = new URLSearchParams(search);
+    const url = params.get('url');
+    if (url) {
+      this.setState({
+        remoteYml: url
+      });
+    }
   }
 
   async initData(country = null) {
@@ -111,44 +126,190 @@ export default class Index extends Component {
     //TODO VALIDATE WITH SCHEMA
     let { languages, values, country } = ft.transformBack(obj);
 
-    let currentValues = null;
+    // let currentValues = null;
     let currentLanguage = languages ? languages[0] : null;
-    if (currentLanguage) currentValues = values[currentLanguage];
+    // if (currentLanguage) currentValues = values[currentLanguage];
 
     //UPDATE STATE
+    console.log('update state');
     this.setState({
       yaml,
       languages,
       values,
       country,
-      loading: false
+      loading: false,
+      yamlLoaded: true
     });
-
     //RESET FORM
     this.switchLang(currentLanguage);
     if (country) this.switchCountry(country);
   }
 
+  // eslint-disable-next-line no-unused-vars
   generate(formValues) {
     let lastGen = moment();
     this.setState({ loading: true, lastGen });
     //has state
-    let { values, currentLanguage, country } = this.state;
+    let { values, country, elements } = this.state;
     //values[currentLanguage] = formValues;
-    let obj = ft.transform(values, country);
+    let obj = ft.transform(values, country, elements);
 
     // let errors = await fv.validatePubliccodeYml(obj);
     // if (errors) alert(errors);
 
     //SET  TIMESTAMP
     this.showResults(obj);
-    //this.showResults(obj);
+  }
+
+
+
+  validateExt(response) {
+    let r = response.json();
+    if (response.ok) {
+      return r;
+    } else {
+      //status for validation error
+      if (response.status == 422) {
+        return r.then(() => {
+          console.log('validation not ok');
+          throw new SubmissionError(r);
+        });
+      } else {
+        //other response failure, try to use internal validator then.
+        console.error('some network failure occured');
+        throw new Error('generic erorr')
+      }
+    }
+  }
+
+  /**
+   *
+   * @param {form data} formValues
+   */
+  validateAndGenerate(formValues) {
+    let lastGen = moment();
+    // let errors = {};
+
+    this.setState({ loading: true, lastGen });
+    this.props.onLoadingRemote(true);
+    //has state
+    let { values, country, elements, languages } = this.state;
+    let currentLanguage = languages ? languages[0] : null;
+
+    // console.log(formValues, values);
+
+    values[currentLanguage] = formValues;
+    let obj = ft.transform(values, country, elements);
+
+    this.fakeLoading();
+    // console.log(obj);
+
+    //  using
+    //  Object.assign(obj, staticFieldsJson)
+    //  something weird occur.
+    //  needs to investigate further
+    obj['publiccodeYmlVersion'] = '0.2';
+
+    return postDataForValidation(obj)
+      .then(this.validateExt)
+      .then(v => {
+        //  everything fine
+        // console.log(v);
+
+        this.setState({ loading: false });
+        this.props.onLoadingRemote(false);
+        // removing empty object
+        // which caused a object {} in yaml results
+        return this.showResults(this.removeEmpty(v));
+      })
+      .catch(e => {
+        if (e instanceof SubmissionError) {
+          return e.errors.then(r => {
+            let errorObj = {};
+            r.map(x => {
+              //replacing all string with * language
+              let key = x.Key.replace(/\/\*\//gi, '_');
+
+              //replacing separator section from field
+              key = key.replace(/\//gi, '_'); //replace / with _
+
+              //BUG
+              //removing language
+              //this issue is well known: editor do not validate multi language
+              //pc since its fields are not named following a lang sintax
+              key = key.replace(/_it_/gi, '_'); //replace _it_ with _
+
+              //description appear when a language is not set
+              //avoided for the moment
+              if (key != 'description')
+                errorObj[key] = x.Reason;
+            });
+            // console.log(errorObj);
+
+            //errors are now taken from state, see line 507 for details
+            // this.props.form[APP_FORM].submitErrors = errorObj
+
+            //errors are in state now
+            //but in sidebar are rendered from form.submitErrors
+            //state there is not updated
+            this.setState({
+              errors: errorObj,
+              loading: false
+            })
+            this.props.onLoadingRemote(false);
+
+            throw new SubmissionError(errorObj);
+          })
+        } else {
+          //generic error use internal validator
+          console.error('Generic error with remote validation, using local instead', e);
+
+          //BUG
+          //not working at the moment
+          //need to figure out why _error subkeys
+          //cause a crash
+          //this will cause a wrong validation for subkeys
+          let errorObj = this.validate(formValues);
+          let err = {};
+          Object.keys(errorObj).forEach(x => {
+            if (!errorObj[x]._error)
+              err[x] = errorObj[x];
+          });
+          console.log(err);
+
+          this.setState({
+            loading: false
+          })
+          this.props.onLoadingRemote(false);
+
+          if (Object.keys(err).length === 0 && err.constructor === Object) {
+            this.showResults(obj);
+          } else {
+            this.setState({
+              errors: err
+            })
+            throw new SubmissionError(err);
+          }
+        }
+      });
+  }
+
+  removeEmpty(obj) {
+    // looking forward to replace with bind()
+    const that = this;
+    Object.keys(obj).forEach(function (key) {
+      (Object.keys(obj[key]).length === 0 && obj[key].constructor === Object) && delete obj[key] ||
+        (obj[key] && typeof obj[key] === 'object') && that.removeEmpty(obj[key])
+    });
+    return obj;
   }
 
   showResults(values) {
     //has state
     try {
-      let yaml = jsyaml.dump(values);
+      let mergedValue = Object.assign(staticFieldsJson, values);
+      let tmpYaml = jsyaml.safeDump(mergedValue, { forceStyleLiteral: true });
+      let yaml = staticFieldsYaml + tmpYaml;
       this.setState({ yaml, loading: false });
     } catch (e) {
       console.error(e);
@@ -160,18 +321,23 @@ export default class Index extends Component {
     const title = "";
     const millis = 3000;
     const { form } = this.props;
-    let { yaml } = this.state;
+    let { yaml, yamlLoaded } = this.state;
     let type = "success";
     let msg = "Success";
-    if (form[APP_FORM].syncErrors) {
+
+    //was syncErrors
+    if (form[APP_FORM].submitErrors) {
       type = "error";
       msg = "There are some errors";
       yaml = null;
+    } else {
+      yamlLoaded = false;
     }
+
 
     this.props.notify({ type, title, msg, millis });
     //this.scrollToError(errors)
-    this.setState({ yaml });
+    this.setState({ yaml, yamlLoaded });
   }
 
   fakeLoading() {
@@ -191,7 +357,8 @@ export default class Index extends Component {
     //VALIDATE TYPES AND SUBOBJECT
     let objs_n_arrays = fv.validateSubTypes(contents, elements);
     errors = Object.assign(required, objs_n_arrays);
-    // console.log(errors);
+    console.log(contents, errors);
+
 
     //UPDATE STATE
     values[currentLanguage] = contents;
@@ -231,19 +398,22 @@ export default class Index extends Component {
     //c
     let props = {
       reset: this.reset.bind(this),
-      submitFeedback: this.submitFeedback.bind(this)
+      submitFeedback: this.submitFeedback.bind(this),
+      yamlLoaded: this.state.yamlLoaded
     };
     return <Foot {...props} />;
   }
 
   renderSidebar() {
     //c with state
-    let { yaml, loading, values, allFields } = this.state;
+    let { yaml, loading, values, allFields, remoteYml } = this.state;
     let props = {
       yaml,
       loading,
       values,
       allFields,
+      remoteYml,
+      onLoadingRemote: this.onLoadingRemote,
       onLoad: this.parseYml.bind(this),
       onReset: this.reset.bind(this)
     };
@@ -265,6 +435,10 @@ export default class Index extends Component {
   }
 
   removeLang(lng) {
+    if (!confirm(`Are you sure you want to remove '${lng}'?`)) {
+      return;
+    }
+
     //has state
     let { values, languages, currentValues, currentLanguage } = this.state;
     //remove contents of lang
@@ -364,18 +538,20 @@ export default class Index extends Component {
       activeSection,
       country,
       allFields,
-      lastGen
+      lastGen,
+      errors
     } = this.state;
 
-    let errors = null;
-    let submitFailed = false;
+    // let errors = null;
+    // let submitFailed = false;
     let { form } = this.props;
 
     if (form && form[APP_FORM]) {
-      errors =
-        form[APP_FORM] && form[APP_FORM].syncErrors
-          ? form[APP_FORM].syncErrors
-          : null;
+      //errors are in state now
+      // errors =
+      //   form[APP_FORM] && form[APP_FORM].submitErrors
+      //     ? form[APP_FORM].submitErrors
+      //     : null;
     }
 
     return (
@@ -389,9 +565,10 @@ export default class Index extends Component {
                 <EditorForm
                   activeSection={activeSection}
                   onAccordion={this.onAccordion.bind(this)}
-                  onSubmit={this.generate.bind(this)}
+                  // onSubmit={this.generate.bind(this)}
+                  onSubmit={this.validateAndGenerate.bind(this)}
                   data={blocks}
-                  validate={this.validate.bind(this)}
+                  // validate={this.validate.bind(this)}
                   country={country}
                   switchCountry={this.switchCountry.bind(this)}
                   errors={errors}
@@ -407,3 +584,5 @@ export default class Index extends Component {
     );
   }
 }
+
+export default Index;
